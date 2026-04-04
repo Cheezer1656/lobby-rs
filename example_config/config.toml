@@ -1,0 +1,20 @@
+spawn_position = [-19.5, 22.0, 61.5]
+# Yaw and pitch in degrees
+spawn_rotation = [180.0, 0.0]
+game_mode = "survival"
+chat_enabled = true
+# Omit to disable the boss bar
+boss_bar_text = "§9§oWelcome§r to the §l§cserver§r!"
+boss_bar_color = "red"
+# Check the wiki for valid division IDs: https://minecraft.wiki/w/Java_Edition_protocol/Packets#Boss_Bar
+boss_bar_division = 1
+# Omit to disable the title
+title_text = "Welcome!"
+# Note: subtext is only shown if the title is shown
+title_subtext = "§2Enjoy your stay!"
+# Note: title timings are in ticks (20 ticks = 1 second)
+# Note: if you omit a time, it will default to 0
+title_animation_enabled = false
+title_fade_in = 20
+title_stay = 50
+title_fade_out = 20
