@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use valence::entity::living::Health;
-use valence::entity::{display, text_display};
+use valence::entity::{display, item_display, text_display};
 use valence::math::{EulerRot, Quat};
 use valence::message::ChatMessageEvent;
 use valence::prelude::*;
@@ -148,6 +148,33 @@ struct TextDisplayEntry {
     scale: Option<[f32; 3]>,
 }
 
+#[derive(Debug)]
+struct ItemStackValue(ItemStack);
+
+impl<'de> Deserialize<'de> for ItemStackValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match ItemKind::from_str(&s) {
+            Some(item_kind) => Ok(ItemStackValue(ItemStack::new(item_kind, 1, None))),
+            None => Err(serde::de::Error::custom(format!(
+                "Invalid item kind: {}",
+                s
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ItemDisplayEntry {
+    item: ItemStackValue,
+    position: PositionValue,
+    rotation: [f32; 3],
+    scale: Option<[f32; 3]>,
+}
+
 #[derive(Resource, Deserialize, Debug)]
 struct ServerConfig {
     spawn_chunk_corners: Option<[[i32; 2]; 2]>,
@@ -168,6 +195,7 @@ struct ServerConfig {
     title_fade_out: Option<i32>,
     parkour: Vec<ParkourCourse>,
     text_displays: Vec<TextDisplayEntry>,
+    item_displays: Vec<ItemDisplayEntry>,
 }
 
 #[derive(Component)]
@@ -273,17 +301,32 @@ fn setup(
         commands.spawn((text_display::TextDisplayEntityBundle {
             text_display_text: text_display::Text(text_display.text.0.clone()),
             position: text_display.position.0,
-            display_right_rotation: display::RightRotation(Quat::from_euler(
-                EulerRot::YXZ,
-                text_display.rotation[0].to_radians(),
-                text_display.rotation[1].to_radians(),
-                text_display.rotation[2].to_radians(),
-            )),
+            display_right_rotation: display::RightRotation(rotation_to_quat(text_display.rotation)),
             display_scale: display::Scale(text_display.scale.unwrap_or([1.0; 3]).into()),
             layer: layer_id,
             ..Default::default()
         },));
     }
+
+    for item_display in &config.item_displays {
+        commands.spawn((item_display::ItemDisplayEntityBundle {
+            item_display_item: item_display::Item(item_display.item.0.clone()),
+            position: item_display.position.0,
+            display_right_rotation: display::RightRotation(rotation_to_quat(item_display.rotation)),
+            display_scale: display::Scale(item_display.scale.unwrap_or([1.0; 3]).into()),
+            layer: layer_id,
+            ..Default::default()
+        },));
+    }
+}
+
+fn rotation_to_quat(rotation: [f32; 3]) -> Quat {
+    Quat::from_euler(
+        EulerRot::YXZ,
+        rotation[0].to_radians(),
+        rotation[1].to_radians(),
+        rotation[2].to_radians(),
+    )
 }
 
 fn init_clients(
