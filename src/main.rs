@@ -360,33 +360,33 @@ fn setup(
             boss_bar_bundle.style.division = boss_bar_division.0;
         }
 
-        commands.spawn((boss_bar_bundle,));
+        commands.spawn(boss_bar_bundle);
     }
 
     for text_display in &config.text_displays {
-        commands.spawn((text_display::TextDisplayEntityBundle {
+        commands.spawn(text_display::TextDisplayEntityBundle {
             text_display_text: text_display::Text(text_display.text.0.clone()),
             position: text_display.position.0,
             display_right_rotation: display::RightRotation(rotation_to_quat(text_display.rotation)),
             display_scale: display::Scale(text_display.scale.unwrap_or([1.0; 3]).into()),
             layer: layer_id,
             ..Default::default()
-        },));
+        });
     }
 
     for item_display in &config.item_displays {
-        commands.spawn((item_display::ItemDisplayEntityBundle {
+        commands.spawn(item_display::ItemDisplayEntityBundle {
             item_display_item: item_display::Item(item_display.item.0.clone()),
             position: item_display.position.0,
             display_right_rotation: display::RightRotation(rotation_to_quat(item_display.rotation)),
             display_scale: display::Scale(item_display.scale.unwrap_or([1.0; 3]).into()),
             layer: layer_id,
             ..Default::default()
-        },));
+        });
     }
 
     for block_display in &config.block_displays {
-        commands.spawn((block_display::BlockDisplayEntityBundle {
+        commands.spawn(block_display::BlockDisplayEntityBundle {
             block_display_block_state: block_display::BlockState(block_display.block.0.clone()),
             position: block_display.position.0,
             display_right_rotation: display::RightRotation(rotation_to_quat(
@@ -395,7 +395,7 @@ fn setup(
             display_scale: display::Scale(block_display.scale.unwrap_or([1.0; 3]).into()),
             layer: layer_id,
             ..Default::default()
-        },));
+        });
     }
 }
 
