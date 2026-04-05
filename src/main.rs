@@ -26,7 +26,7 @@ impl<'de> Deserialize<'de> for GameModeValue {
                 return Err(serde::de::Error::custom(format!(
                     "Invalid game mode: {}",
                     s
-                )))
+                )));
             }
         };
         Ok(GameModeValue(game_mode))
@@ -54,7 +54,7 @@ impl<'de> Deserialize<'de> for BossBarColorValue {
                 return Err(serde::de::Error::custom(format!(
                     "Invalid boss bar color: {}",
                     s
-                )))
+                )));
             }
         };
         Ok(BossBarColorValue(color))
@@ -102,6 +102,29 @@ impl<'de> Deserialize<'de> for TextValue {
     }
 }
 
+#[derive(Debug)]
+struct DVec3Wrapper(DVec3);
+
+impl<'de> Deserialize<'de> for DVec3Wrapper {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let arr = <[i64; 3]>::deserialize(deserializer)?;
+        Ok(DVec3Wrapper(DVec3::new(
+            arr[0] as f64,
+            arr[1] as f64,
+            arr[2] as f64,
+        )))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ParkourCourse {
+    name: TextValue,
+    checkpoints: Vec<DVec3Wrapper>,
+}
+
 #[derive(Resource, Deserialize, Debug)]
 struct ServerConfig {
     spawn_position: [f64; 3],
@@ -117,31 +140,53 @@ struct ServerConfig {
     title_fade_in: Option<i32>,
     title_stay: Option<i32>,
     title_fade_out: Option<i32>,
+    parkour: Vec<ParkourCourse>,
+}
+
+#[derive(Component)]
+struct ParkourTracker {
+    course_index: usize,
+    checkpoint_index: usize,
 }
 
 fn main() {
     let config: ServerConfig = match std::fs::read_to_string(CONFIG_PATH) {
-        Ok(config_str) => {
-            match toml::from_str(&config_str) {
-                Ok(config) => config,
-                Err(e) => {
-                    eprintln!("Failed to parse config file: {}", e);
-                    return;
-                }
+        Ok(config_str) => match toml::from_str(&config_str) {
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("Failed to parse config file: {}", e);
+                return;
             }
-        }
+        },
         Err(e) => {
             eprintln!("Failed to read config file: {}", e);
             return;
         }
     };
 
+    for course in &config.parkour {
+        if course.checkpoints.len() < 2 {
+            eprintln!(
+                "Parkour course '{}' must have at least 2 checkpoints.",
+                course.name.0.to_string()
+            );
+            return;
+        }
+    }
+
     let mut app = App::new();
 
-    app
-        .add_plugins(DefaultPlugins)
+    app.add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (despawn_disconnected_clients, init_clients));
+        .add_systems(
+            Update,
+            (
+                despawn_disconnected_clients,
+                init_clients,
+                check_for_parkour_start,
+                update_parkour_tracker,
+            ),
+        );
 
     if config.chat_enabled {
         app.add_systems(Update, broadcast_chat_message);
@@ -161,9 +206,6 @@ fn setup(
     let layer = LayerBundle::new(ident!("overworld"), &dimensions, &biomes, &server);
     let mut level = AnvilLevel::new(WORLD_PATH, &biomes);
 
-    // Force a 16x16 area of chunks around the origin to be loaded at all times.
-    // This is similar to "spawn chunks" in vanilla. This isn't necessary for the
-    // example to function, but it's done to demonstrate that it's possible.
     // for z in -8..8 {
     //     for x in -8..8 {
     //         let pos = ChunkPos::new(x, z);
@@ -173,7 +215,7 @@ fn setup(
     //     }
     // }
 
-    let layer_id  = commands.spawn((layer, level)).id();
+    let layer_id = commands.spawn((layer, level)).id();
 
     if let Some(boss_bar_text) = &config.boss_bar_text {
         let mut boss_bar_bundle = BossBarBundle {
@@ -188,12 +230,10 @@ fn setup(
         }
 
         if let Some(boss_bar_division) = &config.boss_bar_division {
-            boss_bar_bundle.style.division =  boss_bar_division.0;
+            boss_bar_bundle.style.division = boss_bar_division.0;
         }
 
-        commands.spawn((
-            boss_bar_bundle,
-        ));
+        commands.spawn((boss_bar_bundle,));
     }
 }
 
@@ -245,7 +285,11 @@ fn init_clients(
                 client.set_subtitle(title_subtext.0.clone());
             }
             if config.title_animation_enabled {
-                client.set_title_times(config.title_fade_in.unwrap_or(0), config.title_stay.unwrap_or(0), config.title_fade_out.unwrap_or(0));
+                client.set_title_times(
+                    config.title_fade_in.unwrap_or(0),
+                    config.title_stay.unwrap_or(0),
+                    config.title_fade_out.unwrap_or(0),
+                );
             }
         }
     }
@@ -261,9 +305,65 @@ fn broadcast_chat_message(
             continue;
         };
         for mut client in clients.iter_mut() {
-            client.send_chat_message(
-                format!("<{}> {}", username.as_str(), event.message),
-            );
+            client.send_chat_message(format!("<{}> {}", username.as_str(), event.message));
+        }
+    }
+}
+
+fn check_for_parkour_start(
+    mut clients: Query<
+        (Entity, &mut Client, &Position),
+        (Changed<Position>, Without<ParkourTracker>),
+    >,
+    mut commands: Commands,
+    config: Res<ServerConfig>,
+) {
+    for (entity, mut client, pos) in clients.iter_mut() {
+        if let Some((course_idx, course)) = config
+            .parkour
+            .iter()
+            .enumerate()
+            .filter(|(_, course)| course.checkpoints[0].0 == pos.0.floor())
+            .next()
+        {
+            commands.entity(entity).insert(ParkourTracker {
+                course_index: course_idx,
+                checkpoint_index: 0,
+            });
+            // TODO - Optimize this by preparing the text in advance instead of cloning it every time a player starts the course.
+            client
+                .send_chat_message("Parkour course started: ".into_text() + course.name.0.clone());
+        }
+    }
+}
+
+fn update_parkour_tracker(
+    mut clients: Query<(Entity, &mut Client, &Position, &mut ParkourTracker), Changed<Position>>,
+    mut commands: Commands,
+    config: Res<ServerConfig>,
+) {
+    for (entity, mut client, pos, mut tracker) in clients.iter_mut() {
+        let course = &config.parkour[tracker.course_index];
+        let next_checkpoint = course.checkpoints[tracker.checkpoint_index + 1].0;
+
+        if pos.0.floor() == next_checkpoint {
+            tracker.checkpoint_index += 1;
+
+            if tracker.checkpoint_index == course.checkpoints.len() - 1 {
+                client.send_chat_message(
+                    "Parkour course completed: ".into_text() + course.name.0.clone(),
+                );
+                commands.entity(entity).remove::<ParkourTracker>();
+            } else {
+                client.send_chat_message(
+                    "Checkpoint reached: ".into_text()
+                        + Text::from(format!(
+                            "{} / {}",
+                            tracker.checkpoint_index,
+                            course.checkpoints.len() - 1
+                        )),
+                );
+            }
         }
     }
 }

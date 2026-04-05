@@ -18,3 +18,10 @@ title_animation_enabled = false
 title_fade_in = 20
 title_stay = 50
 title_fade_out = 20
+
+# This is a list of parkour courses. Each course has a name and a list of checkpoints.
+[[parkour]]
+name = "Parkour 1"
+# The first checkpoint is the start, and the last checkpoint is the end
+# Note: all checkpoints must be reached linearly to complete the course (you can't skip checkpoints)
+checkpoints = [[-29, 20, 55],[-50, 34, 17],[-20, 39, 66]]
