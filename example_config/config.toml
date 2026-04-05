@@ -10,6 +10,12 @@ game_mode = "survival"
 kill_oob_players = true
 minimum_y_level = -20
 chat_enabled = true
+scoreboard_title = "§l§6LOBBY"
+# Note: You cannot have duplicate lines in the scoreboard. Add padding if necessary
+scoreboard_text = [
+    "§7Welcome to the lobby!",
+    "§7Enjoy your stay!"
+]
 # Omit to disable the boss bar
 boss_bar_text = "§9§oWelcome§r to the §l§cserver§r!"
 boss_bar_color = "red"

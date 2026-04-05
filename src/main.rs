@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::time::Instant;
 use valence::entity::living::Health;
 use valence::entity::{block_display, display, item_display, text_display};
@@ -11,6 +12,7 @@ use valence::prelude::*;
 use valence::protocol::packets::play::{
     PlayerInteractBlockC2s, PlayerInteractEntityC2s, PlayerInteractItemC2s,
 };
+use valence::scoreboard::{Objective, ObjectiveBundle, ObjectiveDisplay, ObjectiveScores};
 use valence_anvil::AnvilLevel;
 use valence_boss_bar::{BossBarBundle, BossBarColor, BossBarDivision, BossBarHealth, BossBarTitle};
 
@@ -218,6 +220,8 @@ struct ServerConfig {
     kill_oob_players: bool,
     minimum_y_level: i32,
     chat_enabled: bool,
+    scoreboard_title: Option<TextValue>,
+    scoreboard_text: Option<Vec<String>>,
     boss_bar_text: Option<TextValue>,
     boss_bar_color: Option<BossBarColorValue>,
     boss_bar_division: Option<BossBarDivisionValue>,
@@ -316,6 +320,29 @@ fn setup(
     }
 
     let layer_id = EntityLayerId(commands.spawn((layer, level)).id());
+
+    if let Some(scoreboard_title) = &config.scoreboard_title {
+        let objectives = ObjectiveScores::with_map(
+            config
+                .scoreboard_text
+                .as_ref()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .rev()
+                .enumerate()
+                .map(|(i, text)| (text.clone(), i as i32))
+                .collect::<HashMap<_, _>>(),
+        );
+        commands.spawn(
+            ObjectiveBundle {
+                name: Objective::new("sidebar"),
+                display: ObjectiveDisplay(scoreboard_title.0.clone()),
+                scores: objectives,
+                layer: layer_id,
+                ..Default::default()
+            },
+        );
+    }
 
     if let Some(boss_bar_text) = &config.boss_bar_text {
         let mut boss_bar_bundle = BossBarBundle {
