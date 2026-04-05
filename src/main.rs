@@ -1,5 +1,9 @@
 use serde::Deserialize;
+use valence::entity::display::RightRotation;
 use valence::entity::living::Health;
+use valence::entity::text_display;
+use valence::entity::text_display::TextDisplayEntityBundle;
+use valence::math::{EulerRot, Quat};
 use valence::message::ChatMessageEvent;
 use valence::prelude::*;
 use valence_anvil::AnvilLevel;
@@ -103,15 +107,15 @@ impl<'de> Deserialize<'de> for TextValue {
 }
 
 #[derive(Debug)]
-struct DVec3Wrapper(DVec3);
+struct DBlockPosition(DVec3);
 
-impl<'de> Deserialize<'de> for DVec3Wrapper {
+impl<'de> Deserialize<'de> for DBlockPosition {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let arr = <[i64; 3]>::deserialize(deserializer)?;
-        Ok(DVec3Wrapper(DVec3::new(
+        Ok(DBlockPosition(DVec3::new(
             arr[0] as f64,
             arr[1] as f64,
             arr[2] as f64,
@@ -122,7 +126,27 @@ impl<'de> Deserialize<'de> for DVec3Wrapper {
 #[derive(Debug, Deserialize)]
 struct ParkourCourse {
     name: TextValue,
-    checkpoints: Vec<DVec3Wrapper>,
+    checkpoints: Vec<DBlockPosition>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PositionValue(Position);
+
+impl<'de> Deserialize<'de> for PositionValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let arr = <[f64; 3]>::deserialize(deserializer)?;
+        Ok(PositionValue(Position(arr.into())))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct TextDisplayEntry {
+    text: TextValue,
+    position: PositionValue,
+    rotation: [f32; 3],
 }
 
 #[derive(Resource, Deserialize, Debug)]
@@ -144,6 +168,7 @@ struct ServerConfig {
     title_stay: Option<i32>,
     title_fade_out: Option<i32>,
     parkour: Vec<ParkourCourse>,
+    text_displays: Vec<TextDisplayEntry>,
 }
 
 #[derive(Component)]
@@ -224,13 +249,13 @@ fn setup(
         }
     }
 
-    let layer_id = commands.spawn((layer, level)).id();
+    let layer_id = EntityLayerId(commands.spawn((layer, level)).id());
 
     if let Some(boss_bar_text) = &config.boss_bar_text {
         let mut boss_bar_bundle = BossBarBundle {
             title: BossBarTitle(boss_bar_text.0.clone()),
             health: BossBarHealth(1.0),
-            layer: EntityLayerId(layer_id),
+            layer: layer_id,
             ..Default::default()
         };
 
@@ -243,6 +268,21 @@ fn setup(
         }
 
         commands.spawn((boss_bar_bundle,));
+    }
+
+    for text_display in &config.text_displays {
+        commands.spawn((TextDisplayEntityBundle {
+            text_display_text: text_display::Text(text_display.text.0.clone()),
+            position: text_display.position.0,
+            display_right_rotation: RightRotation(Quat::from_euler(
+                EulerRot::YXZ,
+                text_display.rotation[0].to_radians(),
+                text_display.rotation[1].to_radians(),
+                text_display.rotation[2].to_radians(),
+            )),
+            layer: layer_id,
+            ..Default::default()
+        },));
     }
 }
 
