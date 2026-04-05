@@ -1,3 +1,8 @@
+# The minimum and maximum corners of the spawn area (in chunks, not blocks). These chunks will always be loaded. Omit to disable the spawn area from being force loaded.
+spawn_chunk_corners = [
+    [-3, -3],
+    [3, 3]
+]
 spawn_position = [-19.5, 22.0, 61.5]
 # Yaw and pitch in degrees
 spawn_rotation = [180.0, 0.0]

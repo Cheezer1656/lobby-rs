@@ -127,6 +127,7 @@ struct ParkourCourse {
 
 #[derive(Resource, Deserialize, Debug)]
 struct ServerConfig {
+    spawn_chunk_corners: Option<[[i32; 2]; 2]>,
     spawn_position: [f64; 3],
     spawn_rotation: [f32; 2],
     game_mode: GameModeValue,
@@ -212,14 +213,16 @@ fn setup(
     let layer = LayerBundle::new(ident!("overworld"), &dimensions, &biomes, &server);
     let mut level = AnvilLevel::new(WORLD_PATH, &biomes);
 
-    // for z in -8..8 {
-    //     for x in -8..8 {
-    //         let pos = ChunkPos::new(x, z);
-    //
-    //         level.ignored_chunks.insert(pos);
-    //         level.force_chunk_load(pos);
-    //     }
-    // }
+    if let Some(corners) = config.spawn_chunk_corners {
+        for x in corners[0][0]..=corners[1][0] {
+            for z in corners[0][1]..=corners[1][1] {
+                let pos = ChunkPos::new(x, z);
+
+                level.ignored_chunks.insert(pos);
+                level.force_chunk_load(pos);
+            }
+        }
+    }
 
     let layer_id = commands.spawn((layer, level)).id();
 
