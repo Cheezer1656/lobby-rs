@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::time::Instant;
 use valence::entity::living::Health;
 use valence::entity::{block_display, display, item_display, text_display};
 use valence::math::{EulerRot, Quat};
@@ -230,6 +231,8 @@ struct ServerConfig {
 struct ParkourTracker {
     course_index: usize,
     checkpoint_index: usize,
+    start_time: Instant,
+    actionbar_value: f32,
 }
 
 fn main() {
@@ -268,6 +271,7 @@ fn main() {
                 init_clients,
                 check_for_parkour_start,
                 update_parkour_tracker,
+                update_parkour_actionbar_status,
             ),
         );
 
@@ -458,6 +462,10 @@ fn broadcast_chat_message(
     }
 }
 
+fn parkour_prefix() -> Text {
+    "[".bold() + "Parkour".color(Color::GREEN) + "] ".color(Color::WHITE).not_bold()
+}
+
 fn check_for_parkour_start(
     mut clients: Query<
         (Entity, &mut Client, &Position),
@@ -477,10 +485,15 @@ fn check_for_parkour_start(
             commands.entity(entity).insert(ParkourTracker {
                 course_index: course_idx,
                 checkpoint_index: 0,
+                start_time: Instant::now(),
+                actionbar_value: 0.0,
             });
             // TODO - Optimize this by preparing the text in advance instead of cloning it every time a player starts the course.
-            client
-                .send_chat_message("Parkour course started: ".into_text() + course.name.0.clone());
+            client.send_chat_message(
+                parkour_prefix()
+                    + "Course started: ".color(Color::WHITE).not_bold()
+                    + course.name.0.clone(),
+            );
         }
     }
 }
@@ -499,19 +512,38 @@ fn update_parkour_tracker(
 
             if tracker.checkpoint_index == course.checkpoints.len() - 1 {
                 client.send_chat_message(
-                    "Parkour course completed: ".into_text() + course.name.0.clone(),
+                    "Course completed: ".color(Color::WHITE).not_bold() + course.name.0.clone(),
                 );
                 commands.entity(entity).remove::<ParkourTracker>();
             } else {
                 client.send_chat_message(
-                    "Checkpoint reached: ".into_text()
+                    parkour_prefix()
+                        + "Checkpoint reached: ".color(Color::WHITE).not_bold()
                         + Text::from(format!(
-                            "{} / {}",
+                            "{}/{}",
                             tracker.checkpoint_index,
                             course.checkpoints.len() - 1
                         )),
                 );
             }
+        }
+    }
+}
+
+fn update_parkour_actionbar_status(
+    mut clients: Query<(&mut Client, &mut ParkourTracker)>,
+    config: Res<ServerConfig>,
+) {
+    for (mut client, mut tracker) in clients.iter_mut() {
+        let elapsed = (tracker.start_time.elapsed().as_secs_f32() * 10.0).round() / 10.0;
+        if elapsed != tracker.actionbar_value {
+            tracker.actionbar_value = elapsed;
+            client.set_action_bar(format!(
+                "Parkour - {:.1}s ({}/{})",
+                elapsed,
+                tracker.checkpoint_index,
+                config.parkour[tracker.course_index].checkpoints.len() - 1
+            ));
         }
     }
 }
