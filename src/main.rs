@@ -141,7 +141,7 @@ fn main() {
     app
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, init_clients);
+        .add_systems(Update, (despawn_disconnected_clients, init_clients));
 
     if config.chat_enabled {
         app.add_systems(Update, broadcast_chat_message);
