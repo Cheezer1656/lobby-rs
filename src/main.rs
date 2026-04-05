@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use valence::entity::living::Health;
-use valence::entity::{display, item_display, text_display};
+use valence::entity::{block_display, display, item_display, text_display};
 use valence::math::{EulerRot, Quat};
 use valence::message::ChatMessageEvent;
 use valence::prelude::*;
@@ -175,6 +175,33 @@ struct ItemDisplayEntry {
     scale: Option<[f32; 3]>,
 }
 
+#[derive(Debug)]
+struct BlockStateValue(BlockState);
+
+impl<'de> Deserialize<'de> for BlockStateValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match BlockKind::from_str(&s) {
+            Some(block_kind) => Ok(BlockStateValue(BlockState::from_kind(block_kind))),
+            None => Err(serde::de::Error::custom(format!(
+                "Invalid block kind: {}",
+                s
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct BlockDisplayEntry {
+    block: BlockStateValue,
+    position: PositionValue,
+    rotation: [f32; 3],
+    scale: Option<[f32; 3]>,
+}
+
 #[derive(Resource, Deserialize, Debug)]
 struct ServerConfig {
     spawn_chunk_corners: Option<[[i32; 2]; 2]>,
@@ -196,6 +223,7 @@ struct ServerConfig {
     parkour: Vec<ParkourCourse>,
     text_displays: Vec<TextDisplayEntry>,
     item_displays: Vec<ItemDisplayEntry>,
+    block_displays: Vec<BlockDisplayEntry>,
 }
 
 #[derive(Component)]
@@ -314,6 +342,19 @@ fn setup(
             position: item_display.position.0,
             display_right_rotation: display::RightRotation(rotation_to_quat(item_display.rotation)),
             display_scale: display::Scale(item_display.scale.unwrap_or([1.0; 3]).into()),
+            layer: layer_id,
+            ..Default::default()
+        },));
+    }
+
+    for block_display in &config.block_displays {
+        commands.spawn((block_display::BlockDisplayEntityBundle {
+            block_display_block_state: block_display::BlockState(block_display.block.0.clone()),
+            position: block_display.position.0,
+            display_right_rotation: display::RightRotation(rotation_to_quat(
+                block_display.rotation,
+            )),
+            display_scale: display::Scale(block_display.scale.unwrap_or([1.0; 3]).into()),
             layer: layer_id,
             ..Default::default()
         },));
