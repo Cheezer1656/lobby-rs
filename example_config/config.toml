@@ -39,3 +39,4 @@ text = "§6Parkour!!"
 position = [-28.5, 20.5, 55.5]
 # Yaw, pitch, and roll in degrees
 rotation = [60.0, -20.0, 0.0]
+scale = [1.5, 1.5, 1.5]

@@ -1,8 +1,6 @@
 use serde::Deserialize;
-use valence::entity::display::RightRotation;
 use valence::entity::living::Health;
-use valence::entity::text_display;
-use valence::entity::text_display::TextDisplayEntityBundle;
+use valence::entity::{display, text_display};
 use valence::math::{EulerRot, Quat};
 use valence::message::ChatMessageEvent;
 use valence::prelude::*;
@@ -147,6 +145,7 @@ struct TextDisplayEntry {
     text: TextValue,
     position: PositionValue,
     rotation: [f32; 3],
+    scale: Option<[f32; 3]>,
 }
 
 #[derive(Resource, Deserialize, Debug)]
@@ -271,15 +270,16 @@ fn setup(
     }
 
     for text_display in &config.text_displays {
-        commands.spawn((TextDisplayEntityBundle {
+        commands.spawn((text_display::TextDisplayEntityBundle {
             text_display_text: text_display::Text(text_display.text.0.clone()),
             position: text_display.position.0,
-            display_right_rotation: RightRotation(Quat::from_euler(
+            display_right_rotation: display::RightRotation(Quat::from_euler(
                 EulerRot::YXZ,
                 text_display.rotation[0].to_radians(),
                 text_display.rotation[1].to_radians(),
                 text_display.rotation[2].to_radians(),
             )),
+            display_scale: display::Scale(text_display.scale.unwrap_or([1.0; 3]).into()),
             layer: layer_id,
             ..Default::default()
         },));
