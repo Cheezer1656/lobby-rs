@@ -130,6 +130,8 @@ struct ServerConfig {
     spawn_position: [f64; 3],
     spawn_rotation: [f32; 2],
     game_mode: GameModeValue,
+    kill_oob_players: bool,
+    minimum_y_level: i32,
     chat_enabled: bool,
     boss_bar_text: Option<TextValue>,
     boss_bar_color: Option<BossBarColorValue>,
@@ -187,6 +189,10 @@ fn main() {
                 update_parkour_tracker,
             ),
         );
+
+    if config.kill_oob_players {
+        app.add_systems(Update, reset_oob_players);
+    }
 
     if config.chat_enabled {
         app.add_systems(Update, broadcast_chat_message);
@@ -291,6 +297,21 @@ fn init_clients(
                     config.title_fade_out.unwrap_or(0),
                 );
             }
+        }
+    }
+}
+
+fn reset_oob_players(
+    mut clients: Query<(&mut Position, &mut Look, &mut HeadYaw, &mut Health), Changed<Position>>,
+    config: Res<ServerConfig>,
+) {
+    for (mut pos, mut look, mut head_yaw, mut health) in &mut clients {
+        if pos.0.y < config.minimum_y_level as f64 {
+            pos.set(config.spawn_position);
+            head_yaw.0 = config.spawn_rotation[0];
+            look.yaw = config.spawn_rotation[0];
+            look.pitch = config.spawn_rotation[1];
+            health.0 = 20.0;
         }
     }
 }

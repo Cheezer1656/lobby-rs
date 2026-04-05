@@ -2,6 +2,8 @@ spawn_position = [-19.5, 22.0, 61.5]
 # Yaw and pitch in degrees
 spawn_rotation = [180.0, 0.0]
 game_mode = "survival"
+kill_oob_players = true
+minimum_y_level = -20
 chat_enabled = true
 # Omit to disable the boss bar
 boss_bar_text = "§9§oWelcome§r to the §l§cserver§r!"
