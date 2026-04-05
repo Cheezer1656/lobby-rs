@@ -120,7 +120,6 @@ struct ServerConfig {
 }
 
 fn main() {
-    dbg!("Normal".into_text() + "Bold".bold());
     let config: ServerConfig = match std::fs::read_to_string(CONFIG_PATH) {
         Ok(config_str) => {
             match toml::from_str(&config_str) {
@@ -136,7 +135,6 @@ fn main() {
             return;
         }
     };
-    dbg!(&config);
 
     let mut app = App::new();
 
@@ -242,7 +240,6 @@ fn init_clients(
         health.0 = 20.0;
 
         if let Some(title_text) = &config.title_text {
-            // client.set_title("Welcome".italic().color(Color::BLUE));
             client.set_title(title_text.0.clone());
             if let Some(title_subtext) = &config.title_subtext {
                 client.set_subtitle(title_subtext.0.clone());
