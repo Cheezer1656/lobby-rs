@@ -2,9 +2,15 @@ use serde::Deserialize;
 use std::time::Instant;
 use valence::entity::living::Health;
 use valence::entity::{block_display, display, item_display, text_display};
+use valence::event_loop::PacketEvent;
+use valence::inventory::HeldItem;
 use valence::math::{EulerRot, Quat};
 use valence::message::ChatMessageEvent;
+use valence::nbt::compound;
 use valence::prelude::*;
+use valence::protocol::packets::play::{
+    PlayerInteractBlockC2s, PlayerInteractEntityC2s, PlayerInteractItemC2s,
+};
 use valence_anvil::AnvilLevel;
 use valence_boss_bar::{BossBarBundle, BossBarColor, BossBarDivision, BossBarHealth, BossBarTitle};
 
@@ -269,7 +275,8 @@ fn main() {
             (
                 despawn_disconnected_clients,
                 init_clients,
-                check_for_parkour_start,
+                item_interactions,
+                check_for_parkour_start.before(item_interactions),
                 update_parkour_tracker,
                 update_parkour_actionbar_status,
             ),
@@ -466,15 +473,63 @@ fn parkour_prefix() -> Text {
     "[".bold() + "Parkour".color(Color::GREEN) + "] ".color(Color::WHITE).not_bold()
 }
 
+fn item_interactions(
+    mut clients: Query<
+        (
+            Entity,
+            &mut Client,
+            &mut Inventory,
+            &Position,
+            &HeldItem,
+            Option<&ParkourTracker>,
+        ),
+        With<Client>,
+    >,
+    mut packets: EventReader<PacketEvent>,
+    mut commands: Commands,
+    config: Res<ServerConfig>,
+) {
+    for packet in packets.read() {
+        let is_block_interaction_packet = packet.decode::<PlayerInteractBlockC2s>().is_some();
+        if (packet.decode::<PlayerInteractItemC2s>().is_some()
+            || is_block_interaction_packet
+            || packet.decode::<PlayerInteractEntityC2s>().is_some())
+            && let Ok((entity, mut client, mut inv, pos, item, parkour_tracker)) =
+                clients.get_mut(packet.client)
+        {
+            match inv.slot(item.slot()).item {
+                ItemKind::Barrier => {
+                    if let Some(tracker) = parkour_tracker
+                        && pos.floor() == config.parkour[tracker.course_index].checkpoints[0].0
+                    {
+                        client.send_chat_message("You cannot cancel a parkour course while standing on the starting checkpoint.".color(Color::RED).not_bold());
+
+                        if is_block_interaction_packet {
+                            inv.changed |= 1 << 44;
+                        }
+                    } else {
+                        client.send_chat_message(
+                            parkour_prefix() + "Course cancelled".color(Color::WHITE).not_bold(),
+                        );
+                        commands.entity(entity).remove::<ParkourTracker>();
+                        inv.set_slot(item.slot(), ItemStack::EMPTY);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 fn check_for_parkour_start(
     mut clients: Query<
-        (Entity, &mut Client, &Position),
+        (Entity, &mut Client, &Position, &mut Inventory),
         (Changed<Position>, Without<ParkourTracker>),
     >,
     mut commands: Commands,
     config: Res<ServerConfig>,
 ) {
-    for (entity, mut client, pos) in clients.iter_mut() {
+    for (entity, mut client, pos, mut inv) in clients.iter_mut() {
         if let Some((course_idx, course)) = config
             .parkour
             .iter()
@@ -488,6 +543,18 @@ fn check_for_parkour_start(
                 start_time: Instant::now(),
                 actionbar_value: 0.0,
             });
+            inv.set_slot(
+                44,
+                ItemStack::new(
+                    ItemKind::Barrier,
+                    1,
+                    Some(compound! {
+                        "display" => compound! {
+                            "Name" => "{\"text\":\"Cancel Parkour\",\"italic\":false}"
+                        },
+                    }),
+                ),
+            );
             // TODO - Optimize this by preparing the text in advance instead of cloning it every time a player starts the course.
             client.send_chat_message(
                 parkour_prefix()
@@ -499,11 +566,20 @@ fn check_for_parkour_start(
 }
 
 fn update_parkour_tracker(
-    mut clients: Query<(Entity, &mut Client, &Position, &mut ParkourTracker), Changed<Position>>,
+    mut clients: Query<
+        (
+            Entity,
+            &mut Client,
+            &Position,
+            &mut Inventory,
+            &mut ParkourTracker,
+        ),
+        Changed<Position>,
+    >,
     mut commands: Commands,
     config: Res<ServerConfig>,
 ) {
-    for (entity, mut client, pos, mut tracker) in clients.iter_mut() {
+    for (entity, mut client, pos, mut inv, mut tracker) in clients.iter_mut() {
         let course = &config.parkour[tracker.course_index];
         let next_checkpoint = course.checkpoints[tracker.checkpoint_index + 1].0;
 
@@ -515,6 +591,7 @@ fn update_parkour_tracker(
                     "Course completed: ".color(Color::WHITE).not_bold() + course.name.0.clone(),
                 );
                 commands.entity(entity).remove::<ParkourTracker>();
+                inv.set_slot(44, ItemStack::EMPTY);
             } else {
                 client.send_chat_message(
                     parkour_prefix()
