@@ -344,15 +344,13 @@ fn setup(
                 .map(|(i, text)| (text.clone(), i as i32))
                 .collect::<HashMap<_, _>>(),
         );
-        commands.spawn(
-            ObjectiveBundle {
-                name: Objective::new("sidebar"),
-                display: ObjectiveDisplay(scoreboard_title.0.clone()),
-                scores: objectives,
-                layer: layer_id,
-                ..Default::default()
-            },
-        );
+        commands.spawn(ObjectiveBundle {
+            name: Objective::new("sidebar"),
+            display: ObjectiveDisplay(scoreboard_title.0.clone()),
+            scores: objectives,
+            layer: layer_id,
+            ..Default::default()
+        });
     }
 
     if let Some(boss_bar_text) = &config.boss_bar_text {
