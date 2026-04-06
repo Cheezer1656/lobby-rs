@@ -1,6 +1,10 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::Instant;
+use valence::command::AddCommand;
+use valence::command::handler::CommandResultEvent;
+use valence::command::scopes::CommandScopes;
+use valence::command_macros::Command;
 use valence::entity::living::Health;
 use valence::entity::{block_display, display, item_display, text_display};
 use valence::event_loop::PacketEvent;
@@ -245,6 +249,11 @@ struct ParkourTracker {
     actionbar_value: f32,
 }
 
+#[derive(Command, Debug, Clone)]
+#[paths("stuck")]
+#[scopes("lobby.command.stuck")]
+struct StuckCommand;
+
 fn main() {
     let config: ServerConfig = match std::fs::read_to_string(CONFIG_PATH) {
         Ok(config_str) => match toml::from_str(&config_str) {
@@ -273,6 +282,7 @@ fn main() {
     let mut app = App::new();
 
     app.add_plugins(DefaultPlugins)
+        .add_command::<StuckCommand>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -283,6 +293,7 @@ fn main() {
                 check_for_parkour_start.before(item_interactions),
                 update_parkour_tracker,
                 update_parkour_actionbar_status,
+                handle_stuck_command,
             ),
         );
 
@@ -415,6 +426,7 @@ fn init_clients(
             &mut EntityLayerId,
             &mut VisibleChunkLayer,
             &mut VisibleEntityLayers,
+            &mut CommandScopes,
             &mut Position,
             &mut Look,
             &mut HeadYaw,
@@ -431,6 +443,7 @@ fn init_clients(
         mut layer_id,
         mut visible_chunk_layer,
         mut visible_entity_layers,
+        mut permissions,
         mut pos,
         mut look,
         mut head_yaw,
@@ -449,6 +462,8 @@ fn init_clients(
         look.pitch = config.spawn_rotation[1];
         *game_mode = config.game_mode.0;
         health.0 = 20.0;
+
+        permissions.add("lobby.command.stuck");
 
         if let Some(title_text) = &config.title_text {
             client.set_title(title_text.0.clone());
@@ -648,6 +663,21 @@ fn update_parkour_actionbar_status(
                 tracker.checkpoint_index,
                 config.parkour[tracker.course_index].checkpoints.len() - 1
             ));
+        }
+    }
+}
+
+fn handle_stuck_command(
+    mut events: EventReader<CommandResultEvent<StuckCommand>>,
+    mut clients: Query<(&mut Position, &mut Look, &mut HeadYaw)>,
+    config: Res<ServerConfig>,
+) {
+    for event in events.read() {
+        if let Ok((mut pos, mut look, mut head_yaw)) = clients.get_mut(event.executor) {
+            pos.set(config.spawn_position);
+            head_yaw.0 = config.spawn_rotation[0];
+            look.yaw = config.spawn_rotation[0];
+            look.pitch = config.spawn_rotation[1];
         }
     }
 }
