@@ -7,5 +7,3 @@ edition = "2024"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.1.2"
 valence = { git = "https://github.com/Cheezer1656/valence", branch = "lobby-patch" }
-valence_anvil = { git = "https://github.com/Cheezer1656/valence", branch = "lobby-patch" }
-valence_boss_bar = { git = "https://github.com/Cheezer1656/valence", branch = "lobby-patch" }

@@ -1,3 +1,15 @@
+server_port = 25565
+# Options: "online", "offline", "bungee", "velocity"
+server_type = "online"
+# Only applies for the "online" server type
+prevent_client_proxy_connections = false
+max_players = 100
+motd = "A §4lobby-rs§r server!"
+# The smallest packet size (in bytes) that will be compressed. Set to -1 to disable compression.
+# Note: The compression threshold will be ignored for the "velocity" and "bungee" server types since those proxies handle compression themselves.
+compression_threshold = 256
+# Only applies for the "velocity" server type
+forwarding_secret_file = "forwarding.secret"
 # The minimum and maximum corners of the spawn area (in chunks, not blocks). These chunks will always be loaded. Omit to disable the spawn area from being force loaded.
 spawn_chunk_corners = [
     [-3, -3],
@@ -13,11 +25,12 @@ chat_enabled = true
 scoreboard_title = "§l§6LOBBY"
 # Note: You cannot have duplicate lines in the scoreboard. Add padding if necessary
 scoreboard_text = [
-    "§7Welcome to the lobby!",
-    "§7Enjoy your stay!"
+    "Welcome to the lobby!",
+    "Enjoy your stay!",
 ]
 # Omit to disable the boss bar
-boss_bar_text = "§9§oWelcome§r to the §l§cserver§r!"
+# Note: Format codes in the boss bar text act a bit differently than in other places, so text might look different from expected.
+boss_bar_text = "§9§oWelcome§r§f to the §l§cserver§r§f!"
 boss_bar_color = "red"
 # Check the wiki for valid division IDs: https://minecraft.wiki/w/Java_Edition_protocol/Packets#Boss_Bar
 boss_bar_division = 1

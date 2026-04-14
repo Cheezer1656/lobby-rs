@@ -1,5 +1,8 @@
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 use valence::command::AddCommand;
 use valence::command::handler::CommandResultEvent;
@@ -17,11 +20,40 @@ use valence::protocol::packets::play::{
     PlayerInteractBlockC2s, PlayerInteractEntityC2s, PlayerInteractItemC2s,
 };
 use valence::scoreboard::{Objective, ObjectiveBundle, ObjectiveDisplay, ObjectiveScores};
-use valence_anvil::AnvilLevel;
-use valence_boss_bar::{BossBarBundle, BossBarColor, BossBarDivision, BossBarHealth, BossBarTitle};
+use valence::{CompressionThreshold, ServerSettings};
+use valence::network::{async_trait, HandshakeData, ServerListPing};
+use valence::anvil::AnvilLevel;
+use valence::boss_bar::{BossBarBundle, BossBarColor, BossBarDivision, BossBarHealth, BossBarTitle};
 
 const CONFIG_PATH: &str = "config.toml";
 const WORLD_PATH: &str = "world";
+
+#[derive(Debug)]
+enum ServerType {
+    Online,
+    Offline,
+    BungeeCord,
+    Velocity,
+}
+
+impl <'de> Deserialize<'de> for ServerType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.to_lowercase().as_str() {
+            "online" => Ok(ServerType::Online),
+            "offline" => Ok(ServerType::Offline),
+            "bungee" => Ok(ServerType::BungeeCord),
+            "velocity" => Ok(ServerType::Velocity),
+            _ => Err(serde::de::Error::custom(format!(
+                "Invalid server type: {}",
+                s
+            ))),
+        }
+    }
+}
 
 #[derive(Debug)]
 struct GameModeValue(GameMode);
@@ -217,6 +249,13 @@ struct BlockDisplayEntry {
 
 #[derive(Resource, Deserialize, Debug)]
 struct ServerConfig {
+    server_port: u16,
+    server_type: ServerType,
+    prevent_proxy_connections: Option<bool>,
+    max_players: usize,
+    motd: TextValue,
+    compression_threshold: i32,
+    forwarding_secret_file: Option<PathBuf>,
     spawn_chunk_corners: Option<[[i32; 2]; 2]>,
     spawn_position: [f64; 3],
     spawn_rotation: [f32; 2],
@@ -239,6 +278,31 @@ struct ServerConfig {
     text_displays: Vec<TextDisplayEntry>,
     item_displays: Vec<ItemDisplayEntry>,
     block_displays: Vec<BlockDisplayEntry>,
+}
+
+#[derive(Clone)]
+struct MyCallbacks {
+    motd: Arc<Text>,
+}
+
+#[async_trait]
+impl NetworkCallbacks for MyCallbacks {
+    async fn server_list_ping(
+        &self,
+        shared: &SharedNetworkState,
+        _remote_addr: SocketAddr,
+        _handshake_data: &HandshakeData,
+    ) -> ServerListPing {
+        ServerListPing::Respond {
+            online_players: shared.player_count().load(std::sync::atomic::Ordering::Relaxed) as i32,
+            max_players: shared.max_players() as i32,
+            player_sample: vec![],
+            description: self.motd.as_ref().clone(),
+            favicon_png: &[],
+            version_name: valence::MINECRAFT_VERSION.to_owned(),
+            protocol: valence::PROTOCOL_VERSION,
+        }
+    }
 }
 
 #[derive(Component)]
@@ -281,7 +345,35 @@ fn main() {
 
     let mut app = App::new();
 
-    app.add_plugins(DefaultPlugins)
+    app.insert_resource(NetworkSettings {
+        callbacks: ErasedNetworkCallbacks::new(MyCallbacks {
+            motd: Arc::from(config.motd.0.clone()),
+        }),
+        max_players: config.max_players,
+        address: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, config.server_port)),
+        connection_mode: match config.server_type {
+            ServerType::Online => ConnectionMode::Online {
+                    prevent_proxy_connections: config.prevent_proxy_connections.unwrap_or(false),
+            },
+            ServerType::Offline => ConnectionMode::Offline,
+            ServerType::BungeeCord => ConnectionMode::BungeeCord,
+            ServerType::Velocity => ConnectionMode::Velocity {
+                secret: Arc::from(std::fs::read_to_string(config
+                    .forwarding_secret_file
+                    .as_ref()
+                    .unwrap_or(&PathBuf::from("forwarding.secret"))).expect("Unable to read forwarding secret file")),
+            },
+        },
+        ..Default::default()
+    })
+        .insert_resource(ServerSettings {
+            compression_threshold: CompressionThreshold(match config.server_type {
+                ServerType::BungeeCord | ServerType::Velocity => -1,
+                _ => config.compression_threshold,
+            }),
+            ..Default::default()
+        })
+        .add_plugins(DefaultPlugins)
         .add_command::<StuckCommand>()
         .add_systems(Startup, setup)
         .add_systems(
